@@ -1,96 +1,133 @@
-# 1. Modular Arithmetic
+# ecc_oop.py
 
-def modinv(a, p):
-    """Modular inverse using Extended Euclidean Algorithm."""
-    if a == 0:
-        raise ZeroDivisionError("No inverse for 0")
-    lm, hm = 1, 0
-    low, high = a % p, p
-    while low > 1:
-        r = high // low
-        nm, new = hm - lm * r, high - low * r
-        lm, low, hm, high = nm, new, lm, low
-    return lm % p
+class FieldElement:
+    def __init__(self, num, prime):
+        if num >= prime or num < 0:
+            raise ValueError(f"Num {num} not in field range 0 to {prime - 1}")
+        self.num = num
+        self.prime = prime
 
-def mod_add(a, b, p):
-    return (a + b) % p
+    def __eq__(self, other):
+        return self.num == other.num and self.prime == other.prime
 
-def mod_sub(a, b, p):
-    return (a - b) % p
+    def __add__(self, other):
+        self._check_field(other)
+        return FieldElement((self.num + other.num) % self.prime, self.prime)
 
-def mod_mul(a, b, p):
-    return (a * b) % p
+    def __sub__(self, other):
+        self._check_field(other)
+        return FieldElement((self.num - other.num) % self.prime, self.prime)
 
-def mod_pow(a, exp, p):
-    return pow(a, exp, p)
+    def __mul__(self, other):
+        self._check_field(other)
+        return FieldElement((self.num * other.num) % self.prime, self.prime)
 
-# 2. Elliptic Curve Arithmetic
+    def __pow__(self, exp):
+        return FieldElement(pow(self.num, exp, self.prime), self.prime)
 
-# Toy curve: y^2 = x^3 + ax + b over field F_p
-# Choose small prime field
-p = 9739
-a = 497
-b = 1768
+    def __truediv__(self, other):
+        self._check_field(other)
+        return self * other.inv()
 
-O = (None, None)  # Point at infinity
+    def __neg__(self):
+        return FieldElement(-self.num % self.prime, self.prime)
 
-def is_on_curve(P):
-    if P == O:
-        return True
-    x, y = P
-    return (y ** 2 - (x ** 3 + a * x + b)) % p == 0
+    def inv(self):
+        return FieldElement(pow(self.num, -1, self.prime), self.prime)
 
-def point_add(P, Q):
-    if P == O:
-        return Q
-    if Q == O:
-        return P
+    def _check_field(self, other):
+        if self.prime != other.prime:
+            raise TypeError("Cannot operate on two numbers in different Fields.")
 
-    x1, y1 = P
-    x2, y2 = Q
+    def __repr__(self):
+        return f"FieldElement_{self.prime}({self.num})"
 
-    if x1 == x2 and y1 != y2:
-        return O
 
-    if P == Q:
-        return point_double(P)
+class Point:
+    def __init__(self, x, y, a, b, prime):
+        self.a = FieldElement(a, prime)
+        self.b = FieldElement(b, prime)
+        self.prime = prime
 
-    # slope = (y2 - y1) / (x2 - x1)
-    m = mod_mul(mod_sub(y2, y1, p), modinv(mod_sub(x2, x1, p), p), p)
-    x3 = mod_sub(mod_sub(mod_pow(m, 2, p), x1, p), x2, p)
-    y3 = mod_sub(mod_mul(m, mod_sub(x1, x3, p), p), y1, p)
-    return (x3, y3)
+        if x is None and y is None:
+            self.x = self.y = None  # Point at infinity
+        else:
+            self.x = FieldElement(x, prime)
+            self.y = FieldElement(y, prime)
 
-def point_double(P):
-    if P == O:
-        return O
+            if not self._is_on_curve():
+                raise ValueError(f"Point ({x}, {y}) is not on the curve")
 
-    x, y = P
-    m = mod_mul(3 * x * x + a, modinv(2 * y, p), p)
-    x3 = mod_sub(mod_pow(m, 2, p), 2 * x, p)
-    y3 = mod_sub(mod_mul(m, mod_sub(x, x3, p), p), y, p)
-    return (x3, y3)
+    def _is_on_curve(self):
+        if self.x is None:
+            return True
+        left = self.y ** 2
+        right = self.x ** 3 + self.a * self.x + self.b
+        return left == right
 
-def scalar_mult(k, P):
-    """Multiply point P by scalar k using double-and-add."""
-    result = O
-    addend = P
+    def __eq__(self, other):
+        return (
+            self.x == other.x and
+            self.y == other.y and
+            self.a == other.a and
+            self.b == other.b
+        )
 
-    while k:
-        if k & 1:
-            result = point_add(result, addend)
-        addend = point_double(addend)
-        k >>= 1
+    def __add__(self, other):
+        if self.a != other.a or self.b != other.b:
+            raise TypeError("Points are not on the same curve")
 
-    return result
+        if self.x is None:
+            return other
+        if other.x is None:
+            return self
 
+        # Vertical line
+        if self.x == other.x and self.y != other.y:
+            return self.__class__(None, None, self.a.num, self.b.num, self.prime)
+
+        # Point doubling
+        if self == other:
+            if self.y.num == 0:
+                return self.__class__(None, None, self.a.num, self.b.num, self.prime)
+            s = (self.x ** 2 * FieldElement(3, self.prime) + self.a) / (self.y * FieldElement(2, self.prime))
+        else:
+            s = (other.y - self.y) / (other.x - self.x)
+
+        x3 = s ** 2 - self.x - other.x
+        y3 = s * (self.x - x3) - self.y
+
+        return self.__class__(x3.num, y3.num, self.a.num, self.b.num, self.prime)
+
+    def __rmul__(self, coef):
+        coef = coef % self.prime
+        result = self.__class__(None, None, self.a.num, self.b.num, self.prime)
+        addend = self
+
+        while coef:
+            if coef & 1:
+                result += addend
+            addend += addend
+            coef >>= 1
+
+        return result
+
+    def __repr__(self):
+        if self.x is None:
+            return "Point(infinity)"
+        return f"Point({self.x.num}, {self.y.num})"
+
+# Example usage
 if __name__ == "__main__":
-    # Base point on the curve
-    G = (1804, 5368)
-    assert is_on_curve(G)
+    # Define curve: y^2 = x^3 + ax + b over F_p
+    p = 9739
+    a = 497
+    b = 1768
 
-    print("Testing scalar multiplication:")
+    # Base point
+    G = Point(1804, 5368, a, b, p)
+
+    print("Testing scalar multiplication with OOP:")
     for k in range(1, 6):
-        P = scalar_mult(k, G)
+        P = k * G
         print(f"{k} * G = {P}")
-        assert is_on_curve(P)
