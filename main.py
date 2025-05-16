@@ -1,11 +1,11 @@
 import random
-import hashlib
+from sha256 import generate_hash
 from ecc import Point
 from shamir import generate_shares, reconstruct_secret, modinv
 
 # === Helper Functions ===
 def hash_message(msg):
-    return int(hashlib.sha256(msg.encode()).hexdigest(), 16)
+    return int.from_bytes(generate_hash(msg.encode())) # SHA256 hash
 
 def find_order(G: Point):
     """Find the order of point G on the curve."""
