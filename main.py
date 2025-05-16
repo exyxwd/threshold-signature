@@ -1,4 +1,5 @@
 import random
+import argparse
 from sha256 import generate_hash
 from ecc import Point
 from shamir import generate_shares, reconstruct_secret, modinv
@@ -53,7 +54,17 @@ def verify(msg, sig, P, G, n):
     return R.x.num % n == r
 
 # === Main Demo ===
-def main():    
+def main():
+    parser = argparse.ArgumentParser(description="Threshold Signature Demo")
+    parser.add_argument("-n", "--num-shares", type=int, default=5, help="Number of shares to generate, must be <= threshold (default: 5)")
+    parser.add_argument("-t", "--threshold", type=int, default=3, help="Threshold for secret reconstruction, must be >= shares (default: 3)")
+    args = parser.parse_args()
+
+    if args.threshold < 1:
+        parser.error("Threshold must be at least 1.")
+    if args.threshold > args.num_shares:
+        parser.error("Threshold cannot be greater than the number of shares.")
+
     # === Secp256k1 Curve Parameters ===
     p = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F
     a = 0
@@ -73,8 +84,8 @@ def main():
     print(f"Public key (P): {P}\n")
 
     # Shamir's Secret Sharing
-    t = 3
-    n_shares = 5
+    t = args.threshold
+    n_shares = args.num_shares
     shares = generate_shares(d, t, n_shares, n)
     print("Shares:")
     for i, share in enumerate(shares, 1):
