@@ -80,7 +80,6 @@ def verify_share(i, msg, xi, proof, vks, v, N):
     vi = vks[i - 1]
     x = H(msg) % N
     delta = factorial(l)
-    x2 = pow(x, 2 * delta, N)
     x_tilde = pow(x, 4 * delta, N)
     z, c = proof
 
